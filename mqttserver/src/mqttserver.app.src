@@ -1,0 +1,14 @@
+{application, mqttserver,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  ranch,
+                  gproc
+                 ]},
+  {mod, { mqttserver_app, []}},
+  {env, []}
+ ]}.
