@@ -91,8 +91,6 @@ handle_binary(Data, #state{mode=Mode} = State) ->
         {ok, Message, Binary} ->
             case mqttserver_fsm:Mode(Message, State) of
                 {ok, NewState, Outs} ->
-                    ?debugVal(NewState),
-                    ?debugVal(Outs),
                     flush(Outs, NewState),
                     handle_binary(Binary, NewState);
                 {error, NewState, Reason} ->
