@@ -55,25 +55,32 @@
 -type type_connack() :: #type_connack{}.
 
 -record(type_publish, {
+    message_id = undefined :: undefined | non_neg_integer(),
     topic :: topic(),
-    payload :: binary()
+    payload :: binary(),
+    qos :: qos()
 }).
 -type type_publish() :: #type_publish{}.
 
+-record(type_puback, {
+    message_id :: non_neg_integer()
+}).
+-type type_puback() :: #type_puback{}.
+
 -record(type_subscribe, {
-    message_id :: integer(),
+    message_id :: non_neg_integer(),
     topics :: [{topic(), qos()}]
 }).
 -type type_subscribe() :: #type_subscribe{}.
 
 -record(type_suback, {
-    message_id :: integer(),
+    message_id :: non_neg_integer(),
     qoses :: [qos()]
 }).
 -type type_suback() :: #type_suback{}.
 
 -record(type_unsubscribe, {
-    message_id :: integer(),
+    message_id :: non_neg_integer(),
     topics :: [topic()]
 }).
 -type type_unsubscribe() :: #type_unsubscribe{}.
@@ -89,6 +96,7 @@
 -type type_message() :: type_connect()
     | type_connack()
     | type_publish()
+    | type_puback()
     | type_subscribe()
     | type_suback()
     | type_unsubscribe()

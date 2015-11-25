@@ -75,7 +75,7 @@ parse_disconnect_test() ->
 parse_publish_test() ->
     %% 正常データセット
     Packet = <<48, 26, 0, 10, 115, 97, 109, 112, 108, 101, 47, 97, 98, 99, 48, 58, 116, 101, 115, 116, 32, 109, 101, 115, 115, 97, 103, 101>>,
-    Message = #type_publish{topic = <<"sample/abc">>, payload = <<"0:test message">>},
+    Message = #type_publish{topic = <<"sample/abc">>, payload = <<"0:test message">>, qos = 0},
 
     %% 正常系
     ?assertEqual(

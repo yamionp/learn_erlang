@@ -50,10 +50,10 @@ handle_info({tcp, Socket, Data},
     Transport:setopts(Socket, [{active, once}]),
     case handle_binary(<<Buffer/binary, Data/binary>>, State) of
         {NewState, Rest} ->
-            {noreply, NewState#state{buffer = Rest}, NewState#state.timeout};
+            {noreply, NewState#state{buffer = Rest}, NewState#state.keep_alive};
         {error, NewState, Reason, Rest} ->
             ?debugVal(Reason),
-            {noreply, NewState#state{buffer = Rest}, NewState#state.timeout}
+            {noreply, NewState#state{buffer = Rest}, NewState#state.keep_alive}
     end;
 handle_info({tcp_closed, Socket}, State) ->
     ?debugVal({tcp_closed, Socket}),
@@ -66,7 +66,7 @@ handle_info(timeout, State) ->
 handle_info(#type_publish{} = Message,
             #state{socket = Socket,
                    transport = Transport,
-                   timeout = Timeout} = State) ->
+                   keep_alive = Timeout} = State) ->
     ok = Transport:send(Socket, mqttserver_parser:serialise(Message)),
     {noreply, State, Timeout};
 handle_info(_Info, State) ->
@@ -84,7 +84,7 @@ handle_binary(Data, #state{mode=Mode} = State) ->
         {more, Binary} ->
             {State, Binary};
         {ok, Message, Binary} ->
-            case mqttserver_protocol:Mode(Message, State) of
+            case mqttserver_fsm:Mode(Message, State) of
                 {ok, NewState, Outs} ->
                     ?debugVal(NewState),
                     ?debugVal(Outs),
@@ -92,12 +92,17 @@ handle_binary(Data, #state{mode=Mode} = State) ->
                     handle_binary(Binary, NewState);
                 {error, NewState, Reason} ->
                     {error, NewState, Reason, Binary}
-            end
+            end;
+        {error, Reason, Binary} ->
+            {error, State, Reason, Binary}
     end.
 
 flush([], _) ->
     ok;
-flush([{response, Binary}|Rest],
+flush([Message],
+      #state{socket = Socket, transport = Transport}) ->
+    Transport:send(Socket, mqttserver_parser:serialise(Message));
+flush([Message|Rest],
       #state{socket = Socket, transport = Transport} = State) ->
-    ok = Transport:send(Socket, Binary),
+    ok = Transport:send(Socket, mqttserver_parser:serialise(Message)),
     flush(Rest, State).

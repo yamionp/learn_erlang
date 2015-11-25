@@ -11,13 +11,16 @@
 
 
 %% バイト列をパースしてMQTTのメッセージを切り出す
--spec parse(binary()) -> {more, binary()} | {ok, type_message(), binary()}.
+-spec parse(binary()) -> {more, binary()} | {ok, type_message(), binary()} | {error, atom(), binary()}.
 parse(<<FixedHeader:1/binary, Tail/binary>> = Binary) when byte_size(Tail) > 0 ->
     {PayloadLength, Tail2} = calc_remain_length(Tail),
     case byte_size(Tail2) >= PayloadLength of
         true ->  %% 長さは足りている
             <<Payload:PayloadLength/binary, Rest/binary>> = Tail2,
-            {ok, parse(FixedHeader, Payload), Rest};
+            case parse(FixedHeader, Payload) of
+                {error, Reason} -> {error, Reason, Rest};
+                Message -> {ok, Message, Rest}
+            end;
         false ->  %% Payloadが足りない
             {more, Binary}
     end;
@@ -68,12 +71,26 @@ parse(<<?CONNECT:4, _Dup:1, _Qos:2, _Retain:1>>,
     {Payload2, Message2} = parse_username(Payload1, UsernameFlg, Message1),
     {_, Message3} = parse_password(Payload2, PasswordFlg, Message2),
     Message3;
-parse(<<?PUBLISH:4, _Dup:1, _Qos:2, _Retain:1>>,
+%% PUBLISH QoS0
+parse(<<?PUBLISH:4, _Dup:1, 0:2, _Retain:1>>,
       <<TopicLength:16, Topic:TopicLength/binary, Payload/binary>>) ->
     #type_publish{
         topic = Topic,
+        payload = Payload,
+        qos = 0
+    };
+%% Publish QoS1/2
+parse(<<?PUBLISH:4, _Dup:1, QoS:2, _Retain:1>>,
+      <<TopicLength:16, Topic:TopicLength/binary, MessageID:16, Payload/binary>>) ->
+    #type_publish{
+        message_id = MessageID,
+        qos = QoS,
+        topic = Topic,
         payload = Payload
     };
+parse(<<?PUBACK:4, _Dup:1, _QoS:2, _Retain:1>>,
+      <<MessageID:16>>) ->
+    #type_puback{message_id = MessageID};
 parse(<<?SUBSCRIBE:4, _Dup:1, _Qos:2, _Retain:1>>,
       <<MessageID:16, Topics/binary>>) ->
     case parse_qos_topics(Topics, []) of
@@ -151,19 +168,32 @@ parse_qos_topics(<<TopicLength:16, Topic:TopicLength/binary,
 
 %% Record -> iolistのシリアライズ
 -spec serialise(type_message()) -> iolist().
+%% PUBLISH QoS0
 serialise(#type_publish{topic=Topic,
-                        payload=Payload}) ->
+                        payload=Payload,
+                        qos = 0}) ->
     Var = [utf8(Topic), Payload],
     LenBytes = serialise_len(iolist_size(Var)),
-    [<<?PUBLISH:4, 0:4/integer>>, LenBytes, Var];
+    [serialise_fixed_header(?PUBLISH, ?FALSE, 0, ?FALSE), LenBytes, Var];
+%% PUBLISH QoS1
+serialise(#type_publish{topic=Topic,
+                        payload=Payload,
+                        message_id = MessageID,
+                        qos = 1}) ->
+    Var = [utf8(Topic), <<MessageID:16>>, Payload],
+    LenBytes = serialise_len(iolist_size(Var)),
+    [serialise_fixed_header(?PUBLISH, ?FALSE, 1, ?FALSE), LenBytes, Var];
+serialise(#type_puback{message_id=MessageId}) ->
+    LenBytes = serialise_len(2),
+    [serialise_fixed_header(?PUBACK, ?FALSE, 0, ?FALSE), LenBytes, <<MessageId:16>>];
 serialise(#type_suback{message_id=MessageId, qoses=Qoses}) ->
     SerialisedAcks = serialise_acks(Qoses, []),
     LenBytes = serialise_len(iolist_size(SerialisedAcks) + 2),
-    [<<?SUBACK:4, 0:4>>, LenBytes, <<MessageId:16>>, SerialisedAcks];
+    [serialise_fixed_header(?SUBACK, ?FALSE, 0, ?FALSE), LenBytes, <<MessageId:16>>, SerialisedAcks];
 serialise(#type_unsuback{message_id=MessageId}) ->
-    [<<?UNSUBACK:4, 0:4>>, serialise_len(2), <<MessageId:16>>];
+    [serialise_fixed_header(?UNSUBACK, ?FALSE, 0, ?FALSE), serialise_len(2), <<MessageId:16>>];
 serialise(#type_connack{return_code=RC}) ->
-    [<<?CONNACK:4, 0:4>>, serialise_len(2), <<RC:16>>].
+    [serialise_fixed_header(?CONNACK, ?FALSE, 0, ?FALSE), serialise_len(2), <<RC:16>>].
 
 -spec utf8(binary()) -> binary().
 utf8(Bin) when is_binary(Bin) ->
@@ -180,3 +210,7 @@ serialise_acks([], Acks) ->
     Acks;
 serialise_acks([QoS|Rest], Acks) ->
     serialise_acks(Rest, [<<0:6, QoS:2>>|Acks]).
+
+-spec serialise_fixed_header(integer(), flag(), qos(), flag()) -> binary().
+serialise_fixed_header(MessageType, Dup, QoS, Retain) ->
+    <<MessageType:4, Dup:1, QoS:2, Retain:1>>.

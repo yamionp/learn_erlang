@@ -14,7 +14,7 @@
     transport :: module(),
     buffer = <<>> :: binary(),
     mode = waiting_for_connect :: mode(),
-    timeout = ?TIMEOUT :: non_neg_integer(),
+    keep_alive = ?TIMEOUT :: non_neg_integer(),
     will :: boolean(),
     will_topic :: binary(),
     will_payload :: binary()}).
