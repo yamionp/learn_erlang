@@ -3,6 +3,8 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from time import sleep
+
 import paho.mqtt.client as mqtt
 
 host = '127.0.0.1'
@@ -24,8 +26,13 @@ def main():
     client.on_log = _event("on_log")
 
     client.connect(host, port=port, keepalive=60)
+    client.publish(topics[0][0], 'aaalksjfas;lfkjas;flkasj', qos=0)
     client.publish(topics[0][0], 'aaalksjfas;lfkjas;flkasj', qos=1)
-    client.publish(topics[0][0], 'aaalksjfas;lfkjas;flkasj', qos=1)
+
+    # 待ち受け状態にする
+    client.loop_start()
+    sleep(2)
+
     client.disconnect()
 
 
