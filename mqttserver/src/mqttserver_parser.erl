@@ -195,22 +195,26 @@ serialise(#type_unsuback{message_id=MessageId}) ->
 serialise(#type_connack{return_code=RC}) ->
     [serialise_fixed_header(?CONNACK, ?FALSE, 0, ?FALSE), serialise_len(2), <<RC:16>>].
 
+%% utf8文字列をシリアライズ
 -spec utf8(binary()) -> binary().
 utf8(Bin) when is_binary(Bin) ->
     <<(byte_size(Bin)):16, Bin/binary>>.
 
+%% payload lengthをシリアライズ
 -spec serialise_len(non_neg_integer()) -> binary().
 serialise_len(N) when N =< 127 ->
     <<0:1, N:7>>;
 serialise_len(N) ->
     <<1:1, (N rem 128):7, (serialise_len(N div 128))/binary>>.
 
+%% ackのリストをシリアライズ
 -spec serialise_acks([qos()], list()) -> [binary()].
 serialise_acks([], Acks) ->
     Acks;
 serialise_acks([QoS|Rest], Acks) ->
     serialise_acks(Rest, [<<0:6, QoS:2>>|Acks]).
 
+%% 固定長ヘッダーをシリアライズ
 -spec serialise_fixed_header(integer(), flag(), qos(), flag()) -> binary().
 serialise_fixed_header(MessageType, Dup, QoS, Retain) ->
     <<MessageType:4, Dup:1, QoS:2, Retain:1>>.

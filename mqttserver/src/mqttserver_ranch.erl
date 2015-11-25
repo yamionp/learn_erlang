@@ -42,7 +42,7 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-
+%% データ受信
 handle_info({tcp, Socket, Data},
     #state{socket=Socket,
            transport=Transport,
@@ -55,21 +55,26 @@ handle_info({tcp, Socket, Data},
             ?debugVal(Reason),
             {noreply, NewState#state{buffer = Rest}, NewState#state.keep_alive}
     end;
+%% 切断
 handle_info({tcp_closed, Socket}, State) ->
     ?debugVal({tcp_closed, Socket}),
     {stop, normal, State};
+%% 接続エラー
 handle_info({tcp_error, _, Reason}, State) ->
     ?debugVal({tcp_error, Reason}),
     {stop, Reason, State};
+%% タイムアウト
 handle_info(timeout, State) ->
     {stop, normal, State};
+%% publishが回ってきた
 handle_info(#type_publish{} = Message,
             #state{socket = Socket,
                    transport = Transport,
                    keep_alive = Timeout} = State) ->
     ok = Transport:send(Socket, mqttserver_parser:serialise(Message)),
     {noreply, State, Timeout};
-handle_info(_Info, State) ->
+handle_info(Info, State) ->
+    ?debugVal(Info),
     {stop, normal, State}.
 
 terminate(_Reason, _State) ->
@@ -78,7 +83,7 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-
+%% バイナリを受け取って処理する
 handle_binary(Data, #state{mode=Mode} = State) ->
     case mqttserver_parser:parse(Data) of
         {more, Binary} ->
@@ -97,6 +102,7 @@ handle_binary(Data, #state{mode=Mode} = State) ->
             {error, State, Reason, Binary}
     end.
 
+%% メッセージを送信する
 flush([], _) ->
     ok;
 flush([Message],
