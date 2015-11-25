@@ -5,41 +5,39 @@
 
 %% API
 -export([
-    command/1
+    handle_message/2
 ]).
 
 
 %% パケットに応じた処理を行う
-command(#type_connect{} = Message) ->
+handle_message(#type_connect{} = Message, State) ->
     io:format("CONNECT ~p~n", [Message]),
-    {ok, [{response, mqttserver_parser:serialise(#type_connack{return_code=?CONNACK_ALLOW})}]};
-command(#type_publish{topic = Topic} = Message) ->
+    {ok, State, [{response, mqttserver_parser:serialise(#type_connack{return_code=?CONNACK_ALLOW})}]};
+handle_message(#type_publish{topic = Topic} = Message, State) ->
     io:format("PUBLISH ~p~n", [Message]),
-    ?debugVal(Topic),
-    ?debugVal2(gproc:lookup_local_properties({subscriber, Topic})),
-    gproc:send({p, l, {subscriber, Topic}}, {publish, Message}),
-    {ok, []};
-command(#type_subscribe{message_id = MessageID,
-                        topics = Topics} = Message) ->
+    gproc:send({p, l, {subscriber, Topic}}, Message),
+    {ok, State, []};
+handle_message(#type_subscribe{message_id = MessageID,
+                        topics = Topics} = Message, State) ->
     io:format("SUBSCRIBE ~p~n", [Message]),
     subscribe(Topics),
-    {ok, [{response, mqttserver_parser:serialise(
+    {ok, State, [{response, mqttserver_parser:serialise(
         #type_suback{message_id = MessageID,
                      qoses = [Qos || {_Topic, Qos} <- Topics]}
     )}]};
-command(#type_unsubscribe{message_id = MessageID,
-                          topics = Topics} = Message) ->
+handle_message(#type_unsubscribe{message_id = MessageID,
+                          topics = Topics} = Message, State) ->
     io:format("UNSUBSCRIBE ~p~n", [Message]),
     unsubscribe(Topics),
-    {ok, [{response, mqttserver_parser:serialise(
+    {ok, State, [{response, mqttserver_parser:serialise(
         #type_unsuback{message_id = MessageID}
     )}]};
-command(#type_disconnect{} = Message) ->
+handle_message(#type_disconnect{} = Message, State) ->
     io:format("DISCONNECT ~p~n", [Message]),
-    {ok, []};
-command(Message) ->
+    {ok, State, []};
+handle_message(Message, State) ->
     io:format("OTHER ~p~n", [Message]),
-    {error, <<"ERROR">>}.
+    {error, State, <<"ERROR">>}.
 
 
 subscribe([]) ->

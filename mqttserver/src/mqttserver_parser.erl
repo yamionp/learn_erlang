@@ -149,7 +149,7 @@ parse_qos_topics(<<TopicLength:16, Topic:TopicLength/binary,
                    Rest/binary>>, Topics) ->
     parse_qos_topics(Rest, [{Topic, Qos} | Topics]).
 
-
+%% Record -> iolistのシリアライズ
 -spec serialise(type_message()) -> iolist().
 serialise(#type_publish{topic=Topic,
                         payload=Payload}) ->

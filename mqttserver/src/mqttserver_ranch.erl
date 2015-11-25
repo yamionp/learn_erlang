@@ -1,5 +1,4 @@
 -module(mqttserver_ranch).
--author("yugo.shimizu").
 
 -behaviour(gen_server).
 -behaviour(ranch_protocol).
@@ -19,11 +18,14 @@
 -include("mqttserver_protocol.hrl").
 -include("mqttserver.hrl").
 
--define(TIMEOUT, 5000).
+-define(TIMEOUT, 60000).
 
 -record(state, {socket :: inet:socket(),
                 transport :: module(),
-                buffer = <<>> :: binary()}).
+                buffer = <<>> :: binary(),
+                will :: boolean(),
+                will_topic :: binary(),
+                will_payload :: binary()}).
 
 
 start_link(Ref, Socket, Transport, Opts) ->
@@ -41,6 +43,15 @@ init(Ref, Socket, Transport, _Opts = []) ->
                               transport=Transport
                           }, ?TIMEOUT).
 
+
+handle_call(_Request, _From, State) ->
+    {reply, ok, State}.
+
+
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+
 handle_info({tcp, Socket, Data},
     State=#state{socket=Socket,
         transport=Transport,
@@ -53,31 +64,20 @@ handle_info({tcp, Socket, Data},
             ?debugVal(Reason),
             {noreply, State#state{buffer = Rest}, ?TIMEOUT}
     end;
-handle_info({tcp_closed, _Socket}, State) ->
-    ?debugVal(_Socket),
+handle_info({tcp_closed, Socket}, State) ->
+    ?debugVal({tcp_closed, Socket}),
     {stop, normal, State};
 handle_info({tcp_error, _, Reason}, State) ->
-    ?debugVal(Reason),
+    ?debugVal({tcp_error, Reason}),
     {stop, Reason, State};
 handle_info(timeout, State) ->
-    ?debugVal(State),
     {stop, normal, State};
-handle_info({publish, #type_publish{} = Message},
+handle_info(#type_publish{} = Message,
             #state{socket = Socket, transport = Transport} = State) ->
-    ?debugVal(Message),
     ok = Transport:send(Socket, mqttserver_parser:serialise(Message)),
     {noreply, State, ?TIMEOUT};
-handle_info(Info, State) ->
-    ?debugVal(Info),
-    ?debugVal(State),
+handle_info(_Info, State) ->
     {stop, normal, State}.
-
-
-handle_call(_Request, _From, State) ->
-    {reply, ok, State}.
-
-handle_cast(_Msg, State) ->
-    {noreply, State}.
 
 terminate(_Reason, _State) ->
     ok.
@@ -91,12 +91,12 @@ handle_binary(Data, State) ->
         {more, Binary} ->
             {State, Binary};
         {ok, Message, Binary} ->
-            case mqttserver_protocol:command(Message) of
-                {ok, Outs} ->
+            case mqttserver_protocol:handle_message(Message, State) of
+                {ok, State, Outs} ->
                     flush(Outs, State),
                     handle_binary(Binary, State);
                 {error, Reason} ->
-                    {error, Reason, Binary}
+                    {error, State, Reason, Binary}
             end
     end.
 
