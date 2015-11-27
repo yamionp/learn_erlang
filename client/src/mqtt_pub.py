@@ -25,13 +25,17 @@ def main():
     client.on_connect = _event("on_connect")
     client.on_log = _event("on_log")
 
+    # 接続
+    client.will_set(topics[0][0], b'will payload test', qos=1)
     client.connect(host, port=port, keepalive=60)
+
+    # publish
     client.publish(topics[0][0], 'aaalksjfas;lfkjas;flkasj', qos=0)
     client.publish(topics[0][0], 'aaalksjfas;lfkjas;flkasj', qos=1)
 
     # 待ち受け状態にする
-    client.loop_start()
-    sleep(2)
+    for i in xrange(5):
+        client.loop()
 
     client.disconnect()
 

@@ -9,12 +9,15 @@
 
 -define(TIMEOUT, 5000).
 
--type mode() :: waiting_for_connect | connected.
+-type mode() :: waiting_for_connect | connected | disconnected.
 -record(state, {socket :: inet:socket(),
     transport :: module(),
     buffer = <<>> :: binary(),
     mode = waiting_for_connect :: mode(),
     keep_alive = ?TIMEOUT :: non_neg_integer(),
-    will :: boolean(),
+    next_message_id = 1 :: non_neg_integer(),
+    will = false :: boolean(),
+    will_retain :: flag(),
+    will_qos :: qos(),
     will_topic :: binary(),
     will_payload :: binary()}).

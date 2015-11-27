@@ -11,9 +11,10 @@
 
 
 %% CONNECT待ち
-waiting_for_connect(#type_connect{keep_alive = KeepAlive} = Message, State) ->
+waiting_for_connect(#type_connect{keep_alive = KeepAlive} = Message, State1) ->
     io:format("waiting_for_connect: CONNECT ~p~n", [Message]),
-    {ok, State#state{mode = connected,
+    State2 = set_will(Message, State1),
+    {ok, State2#state{mode = connected,
                      keep_alive = KeepAlive * 1000},
         [#type_connack{return_code=?CONNACK_ALLOW}]};
 waiting_for_connect(Message, State) ->
@@ -50,7 +51,7 @@ connected(#type_unsubscribe{message_id = MessageID,
     {ok, State, [#type_unsuback{message_id = MessageID}]};
 connected(#type_disconnect{} = Message, State) ->
     io:format("DISCONNECT ~p~n", [Message]),
-    {ok, State#state{mode = waiting_for_connect}, []};
+    {ok, State#state{mode = disconnected}, []};
 connected(#type_puback{} = Message, State) ->
     io:format("PUBACK ~p~n", [Message]),
     {ok, State, []};
@@ -58,7 +59,10 @@ connected(Message, State) ->
     io:format("connected: OTHER ~p~n", [Message]),
     {error, State, <<"ERROR">>}.
 
+%%
 %% inner functions
+%%
+
 subscribe([]) ->
     ok;
 subscribe([{Topic, _Qos}|Rest]) ->
@@ -72,3 +76,17 @@ unsubscribe([Topic|Rest]) ->
     gproc:unreg({p, l, {subscriber, Topic}}),
     ?debugVal2(gproc:lookup_local_properties({subscriber, Topic})),
     unsubscribe(Rest).
+
+set_will(#type_connect{will_topic = undefined}, State) ->
+    State;
+set_will(#type_connect{will_qos = QoS,
+                       will_retain = Retain,
+                       will_topic = Topic,
+                       will_payload = Payload}, State) ->
+    State#state{
+        will = true,
+        will_qos = QoS,
+        will_retain = Retain,
+        will_topic = Topic,
+        will_payload = Payload
+    }.

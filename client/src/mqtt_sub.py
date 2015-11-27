@@ -31,6 +31,5 @@ if __name__ == '__main__':
     client.subscribe(topics[0][0])
 
     # 待ち受け状態にする
-    client.loop_start()
-
-    sleep(60)
+    while not client.loop():
+        sleep(0.1)

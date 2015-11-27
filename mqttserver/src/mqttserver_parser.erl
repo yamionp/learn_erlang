@@ -121,12 +121,12 @@ parse(_, _) -> {error, cant_parse}.
 parse_will(Binary, 0, Message) -> {Binary, Message};
 parse_will(<<WillTopicLength:16,
              WillTopic:WillTopicLength/binary,
-             WillMessageLength:16,
-             WillMessage:WillMessageLength/binary,
+             WillPayloadLength:16,
+             WillPayload:WillPayloadLength/binary,
              Remain/binary>>, 1, Message) ->
     {Remain, Message#type_connect{
         will_topic = WillTopic,
-        will_message = WillMessage
+        will_payload = WillPayload
     }}.
 
 %% CONNECTのPayloadからUsernameを取り出す

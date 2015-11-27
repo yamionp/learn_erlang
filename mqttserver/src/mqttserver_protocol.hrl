@@ -42,7 +42,7 @@
     will_retain :: flag(),
     will_qos :: qos(),
     will_topic :: topic(),
-    will_message :: binary(),
+    will_payload :: binary(),
     clean_session :: flag(),
     keep_alive :: non_neg_integer(),
     client_id :: client_id()

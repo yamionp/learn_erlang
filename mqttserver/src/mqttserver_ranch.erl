@@ -55,9 +55,24 @@ handle_info({tcp, Socket, Data},
             ?debugVal(Reason),
             {noreply, NewState#state{buffer = Rest}, NewState#state.keep_alive}
     end;
-%% 切断
-handle_info({tcp_closed, Socket}, State) ->
-    ?debugVal({tcp_closed, Socket}),
+%% 切断 connected かつwill有り
+handle_info({tcp_closed, Socket},
+            #state{mode = connected,
+                   will = true,
+                   will_qos = QoS,
+                   will_topic = Topic,
+                   will_payload = Payload} = State) ->
+    ?debugVal({tcp_closed, Socket, State}),
+    %% Todo: ここにコレを書きたくないのでFSMを別プロセスにし、メッセージで飛ばすように変える
+    gproc:send({p, l, {subscriber, Topic}},
+               #type_publish{qos = QoS,
+                             topic = Topic,
+                             payload = Payload}),
+    {stop, normal, State};
+%% 切断 will無し
+handle_info({tcp_closed, Socket},
+            #state{will = false} = State) ->
+    ?debugVal({tcp_closed, Socket, State}),
     {stop, normal, State};
 %% 接続エラー
 handle_info({tcp_error, _, Reason}, State) ->
@@ -67,12 +82,20 @@ handle_info({tcp_error, _, Reason}, State) ->
 handle_info(timeout, State) ->
     {stop, normal, State};
 %% publishが回ってきた
-handle_info(#type_publish{} = Message,
+handle_info(#type_publish{qos = 0} = Message,
             #state{socket = Socket,
                    transport = Transport,
                    keep_alive = Timeout} = State) ->
     ok = Transport:send(Socket, mqttserver_parser:serialise(Message)),
     {noreply, State, Timeout};
+%% publish qos 1以上 なのでMessageIDをつけて送信
+handle_info(#type_publish{} = Message,
+            #state{socket = Socket,
+                   transport = Transport,
+                   keep_alive = Timeout,
+                   next_message_id = NextMessageID} = State) ->
+    ok = Transport:send(Socket, mqttserver_parser:serialise(Message#type_publish{message_id = NextMessageID})),
+    {noreply, State#state{next_message_id = NextMessageID + 1}, Timeout};
 handle_info(Info, State) ->
     ?debugVal(Info),
     {stop, normal, State}.
@@ -89,6 +112,7 @@ handle_binary(Data, #state{mode=Mode} = State) ->
         {more, Binary} ->
             {State, Binary};
         {ok, Message, Binary} ->
+            %% vmqっぽくしたが、やはり別プロセスでメッセージパッシングしたほうがよさそう
             case mqttserver_fsm:Mode(Message, State) of
                 {ok, NewState, Outs} ->
                     flush(Outs, NewState),
